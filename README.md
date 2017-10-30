@@ -1,2 +1,2 @@
-# sistema-porto-b
-Repositório do projeto da cadeira Teste de Verificação de Software
+# IF1013
+Modelagem de um sistema portuário utilizando a linguagem B.
