@@ -11,12 +11,12 @@ SETS
     //NAVIOS_ATENDIMENTO;//Fila de navios em atendimento
     //NAVIOS_QUARENTENA;//Navios que estão em quarentena
 //    VEICULO;//Carros cadastrados
-//    CONTAINERS;//Containers cadastrados
+    CONTAINERS_ID;//Containers cadastrados
 //    CONTAINERS_RECEPCAO;//Containers em recepcao
 //    CONTAINERS_ACEITOS;
 //    CONTAINERS_RECUSADOS;
 //    STATUS_NAVIO = {recepcionado, atendido, liberado};
-//    STATUS_CONTAINER = {recepcionado, auditado, aceito, encaminhado};
+    STATUS_CONTAINER = {recepcionado, auditado, retirado, encaminhado};
 //    MODO_PORTO = {aberto, fechado};
     CPF
 //    ANCORADOURO
@@ -29,6 +29,7 @@ CONSTANTS
 //   MAX_PESO_CARRO,
 //   MAX_NAVIOS_ANCORADOURO
     REG_NAVIO,
+    REG_CONTAINER,
     CAPACIDADE_MAXIMA
 PROPERTIES
 //    MAX_NAVIOS_RECEPCAO : NATURAL & MAX_NAVIOS_RECEPCAO = 5 &
@@ -40,31 +41,37 @@ PROPERTIES
 //    MAX_NAVIOS_ANCORADOURO : NATURAL & MAX_NAVIOS_ANCORADOURO = 1
     REG_NAVIO = struct(inscricao: TIEM, maxContainers: NATURAL)
     & CAPACIDADE_MAXIMA : NATURAL & CAPACIDADE_MAXIMA = 10
+    & REG_CONTAINER = struct(registro: CONTAINERS_ID, status: STATUS_CONTAINER)
 VARIABLES
 //    navios,
 //    carros,
 //    containers,
 //    modoAtual,
-//    containerNavio,
+    containerNavio,
 //    ancoradouro,
     funcionarios,
     navios,
     capacidades,
-    administrador
+    administrador,
+    containers
     
     
 INVARIANT
-    navios: POW(TIEM) &
-    funcionarios: POW(CPF) &
-    administrador : funcionarios --> BOOL &
-    capacidades: navios --> NATURAL &
-    0 /: ran(capacidades) & ran(capacidades) <: 1..CAPACIDADE_MAXIMA
-    
+    navios: POW(TIEM)
+    & funcionarios: POW(CPF) 
+    & administrador : funcionarios --> BOOL
+    & capacidades: navios --> NATURAL
+    & 0 /: ran(capacidades) & ran(capacidades) <: 1..CAPACIDADE_MAXIMA
+    & containers: POW(CONTAINERS_ID)
+    & containerNavio: REG_CONTAINERS -->> REG_NAVIOS
+    //verificar se o container no registro de container existe em containers mesmo para o registro de navios
 INITIALISATION
     navios := {}
     || capacidades := {}
     || administrador := {}
     || funcionarios := {}
+    || containers := {}
+    || containerNavio := {}
 OPERATIONS
      /* ----------- usuários ----------- */
     
@@ -104,6 +111,39 @@ OPERATIONS
         THEN
             navios := navios - {tiem}
             || capacidades := {tiem} <<| capacidades
+        END;
+        
+    /* ----------- containers ----------- */
+    
+    cadastrarContainer(func, reg, tiem) =        
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & tiem : TIEM & tiem : navios
+            & reg : CONTAINERS_ID & reg /: containers
+        THEN
+            containers := containers \/ {reg}
+            || containerNavio := containerNavio \/ { (reg, tiem) }
+        END;
+        
+    removerContainer(func, reg) =
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & reg : CONTAINERS_ID & reg : containers
+        THEN
+            containers := containers - {reg}
+            || containerNavio := {reg} <<| containerNavio
+        END;
+        
+    
+        
+    retirarContainer(func, reg, tiem) =
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & tiem : TIEM & tiem : navios
+            & reg : CONTAINERS_ID & reg : containers
+            //retirar o registro do container da variavel containerNavio
+        THEN
+            containerNavio := {reg} <<| containerNavio
         END
       
 END
