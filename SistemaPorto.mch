@@ -85,6 +85,8 @@ OPERATIONS
             administrador := administrador <+ { (func,valor) }
         END;
     
+    /* ----------- navios ----------- */
+    
     cadastrarNavio(func, tiem, capacidade) =        
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
@@ -93,7 +95,15 @@ OPERATIONS
         THEN
             navios := navios \/ {tiem}
             || capacidades := capacidades \/ { (tiem, capacidade) }
+        END;
+        
+    removerNavio(func, tiem) =
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & tiem : TIEM & tiem : navios
+        THEN
+            navios := navios - {tiem}
+            || capacidades := {tiem} <<| capacidades
         END
-
       
 END
