@@ -47,7 +47,7 @@ VARIABLES
 //    carros,
 //    containers,
 //    modoAtual,
-    containerNavio,
+    navioContainer,
 //    ancoradouro,
     funcionarios,
     navios,
@@ -58,20 +58,22 @@ VARIABLES
     
 INVARIANT
     navios: POW(TIEM)
+    & containers: POW(CONTAINERS_ID)
     & funcionarios: POW(CPF) 
     & administrador : funcionarios --> BOOL
     & capacidades: navios --> NATURAL
     & 0 /: ran(capacidades) & ran(capacidades) <: 1..CAPACIDADE_MAXIMA
-    & containers: POW(CONTAINERS_ID)
-    & containerNavio: REG_CONTAINERS -->> REG_NAVIOS
-    //verificar se o container no registro de container existe em containers mesmo para o registro de navios
+    & navioContainer: navios +-> POW(REG_CONTAINER)
+    & ! (cn1,cn2) . (
+        (cn1 : dom(navioContainer) & cn2 : dom(navioContainer) & cn1 /= cn2)
+        => navioContainer(cn1) /\ navioContainer(cn2) = {})
 INITIALISATION
     navios := {}
     || capacidades := {}
     || administrador := {}
     || funcionarios := {}
     || containers := {}
-    || containerNavio := {}
+    || navioContainer := {}
 OPERATIONS
      /* ----------- usuários ----------- */
     
@@ -115,35 +117,52 @@ OPERATIONS
         
     /* ----------- containers ----------- */
     
-    cadastrarContainer(func, reg, tiem) =        
+    cadastrarContainer(func, reg, tiem, stat) =        
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
             & tiem : TIEM & tiem : navios
             & reg : CONTAINERS_ID & reg /: containers
+            & stat : STATUS_CONTAINER & stat = recepcionado
         THEN
             containers := containers \/ {reg}
-            || containerNavio := containerNavio \/ { (reg, tiem) }
+            ||
+            IF tiem : dom(navioContainer) THEN
+                navioContainer := navioContainer 
+                <+ {(tiem, navioContainer(tiem) \/ {rec(registro:reg, status:stat)})}
+            ELSE
+                navioContainer := navioContainer \/ {tiem |-> {rec(registro:reg, status:stat)}}
+            END
         END;
         
-    removerContainer(func, reg) =
+    retirarContainer(func, reg) =
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
             & reg : CONTAINERS_ID & reg : containers
         THEN
-            containers := containers - {reg}
-            || containerNavio := {reg} <<| containerNavio
+            ANY tiem WHERE
+                tiem : dom(navioContainer) &
+                tiem : {num | num : TIEM & num : dom(navioContainer) & 
+                    # num2 . (num2: REG_CONTAINER & num2 : navioContainer(num) 
+                        & num2'registro = reg)}
+            THEN
+                IF card(navioContainer(tiem)) = 1 THEN
+                    navioContainer := {tiem} <<| navioContainer
+                ELSE
+                    navioContainer(tiem) := navioContainer(tiem) 
+                    /\ {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg}
+                END
+            END
         END;
         
-    
-        
-    retirarContainer(func, reg, tiem) =
+     atualizarStatus(func, tiem, reg) =
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
-            & tiem : TIEM & tiem : navios
-            & reg : CONTAINERS_ID & reg : containers
-            //retirar o registro do container da variavel containerNavio
+            & tiem : navios & tiem : dom(navioContainer)
+            & reg : REG_CONTAINER & reg : navioContainer(tiem)
         THEN
-            containerNavio := {reg} <<| containerNavio
+            navioContainer(tiem) := navioContainer(tiem) - {reg}
+                
         END
+     //{recepcionado, auditado, retirado, encaminhado};
       
 END
