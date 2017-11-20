@@ -7,55 +7,25 @@ MACHINE
 
 SETS
     TIEM;//Conjunto dos navios cadastrados
-    //NAVIOS_RECEPCAO;//Fila de navios em recepcao
-    //NAVIOS_ATENDIMENTO;//Fila de navios em atendimento
-    //NAVIOS_QUARENTENA;//Navios que estão em quarentena
-//    VEICULO;//Carros cadastrados
     CONTAINERS_ID;//Containers cadastrados
-//    CONTAINERS_RECEPCAO;//Containers em recepcao
-//    CONTAINERS_ACEITOS;
-//    CONTAINERS_RECUSADOS;
-//    STATUS_NAVIO = {recepcionado, atendido, liberado};
     STATUS_CONTAINER = {recepcionado, auditado, retirado, encaminhado};
-//    MODO_PORTO = {aberto, fechado};
     CPF
-//    ANCORADOURO
 CONSTANTS
-//   MAX_NAVIOS_RECEPCAO,
-//   MAX_NAVIOS_ATENDIMENTO,
-//   MAX_CONTAINERS_NAVIO,
-//   MAX_CARROS_PORTO,
-//   MAX_ITENS_CARRO,
-//   MAX_PESO_CARRO,
-//   MAX_NAVIOS_ANCORADOURO
     REG_NAVIO,
     REG_CONTAINER,
     CAPACIDADE_MAXIMA
 PROPERTIES
-//    MAX_NAVIOS_RECEPCAO : NATURAL & MAX_NAVIOS_RECEPCAO = 5 &
-//    MAX_NAVIOS_ATENDIMENTO : NATURAL & MAX_NAVIOS_ATENDIMENTO = 3 &
-//    MAX_CONTAINERS_NAVIO : NATURAL & MAX_CONTAINERS_NAVIO = 18500 &
-//    MAX_CARROS_PORTO : NATURAL & MAX_CARROS_PORTO = 50 &
-//    MAX_ITENS_CARRO : NATURAL & MAX_ITENS_CARRO = 50 &
-//    MAX_PESO_CARRO : NATURAL & MAX_PESO_CARRO = 700 &
-//    MAX_NAVIOS_ANCORADOURO : NATURAL & MAX_NAVIOS_ANCORADOURO = 1
+
     REG_NAVIO = struct(inscricao: TIEM, maxContainers: NATURAL)
     & CAPACIDADE_MAXIMA : NATURAL & CAPACIDADE_MAXIMA = 10
     & REG_CONTAINER = struct(registro: CONTAINERS_ID, status: STATUS_CONTAINER)
 VARIABLES
-//    navios,
-//    carros,
-//    containers,
-//    modoAtual,
     navioContainer,
-//    ancoradouro,
     funcionarios,
     navios,
     capacidades,
     administrador,
     containers
-    
-    
 INVARIANT
     navios: POW(TIEM)
     & containers: POW(CONTAINERS_ID)
@@ -64,6 +34,7 @@ INVARIANT
     & capacidades: navios --> NATURAL
     & 0 /: ran(capacidades) & ran(capacidades) <: 1..CAPACIDADE_MAXIMA
     & navioContainer: navios +-> POW(REG_CONTAINER)
+    //Garantir que nao haja dois navios iguais
     & ! (cn1,cn2) . (
         (cn1 : dom(navioContainer) & cn2 : dom(navioContainer) & cn1 /= cn2)
         => navioContainer(cn1) /\ navioContainer(cn2) = {})
@@ -81,10 +52,12 @@ OPERATIONS
         PRE
             func : CPF & func /: funcionarios
         THEN
+            //cadastra funcionario sem privilegios
             funcionarios := funcionarios \/ {func}
             || administrador := administrador \/ { (func,FALSE) }
         END;
         
+        //metodo para dar privilegio de administrador
         atualizarPrivilegio(func,valor) =
         PRE
             func : CPF & func : funcionarios &
@@ -126,6 +99,8 @@ OPERATIONS
         THEN
             containers := containers \/ {reg}
             ||
+            //cadastra o container e associa a um navio
+            // cada navio estará associado a um conjunto de containers
             IF tiem : dom(navioContainer) THEN
                 navioContainer := navioContainer 
                 <+ {(tiem, navioContainer(tiem) \/ {rec(registro:reg, status:stat)})}
@@ -137,32 +112,68 @@ OPERATIONS
     retirarContainer(func, reg) =
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
-            & reg : CONTAINERS_ID & reg : containers
+            & reg : REG_CONTAINER & reg'registro : containers & reg'status = recepcionado
+            
         THEN
+            //remove o container do navio, se nao haver container no navio então exclui ele também
             ANY tiem WHERE
                 tiem : dom(navioContainer) &
                 tiem : {num | num : TIEM & num : dom(navioContainer) & 
                     # num2 . (num2: REG_CONTAINER & num2 : navioContainer(num) 
-                        & num2'registro = reg)}
+                        & num2'registro = reg'registro)}
             THEN
+                containers := containers - {reg'registro}
+                ||
                 IF card(navioContainer(tiem)) = 1 THEN
                     navioContainer := {tiem} <<| navioContainer
                 ELSE
                     navioContainer(tiem) := navioContainer(tiem) 
-                    /\ {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg}
+                    - {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg'registro}
                 END
             END
         END;
         
-     atualizarStatus(func, tiem, reg) =
+        //atualiza o status do container para auditado
+     setAuditado(func, tiem, reg) =
         PRE
             func : CPF & func : funcionarios & administrador(func) = TRUE
             & tiem : navios & tiem : dom(navioContainer)
-            & reg : REG_CONTAINER & reg : navioContainer(tiem)
+            & reg : REG_CONTAINER & reg : navioContainer(tiem) & reg'status = recepcionado
         THEN
-            navioContainer(tiem) := navioContainer(tiem) - {reg}
-                
-        END
-     //{recepcionado, auditado, retirado, encaminhado};
-      
+            navioContainer(tiem) := (navioContainer(tiem) - {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg'registro})
+           \/ {rec(registro:reg'registro, status:auditado)}    
+        END;
+        
+        //atualiza o status do container para retirado 
+     setRetirado(func, tiem, reg) =
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & tiem : navios & tiem : dom(navioContainer)
+            & reg : REG_CONTAINER & reg : navioContainer(tiem) & reg'status = auditado
+        THEN
+            navioContainer(tiem) := (navioContainer(tiem) - {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg'registro})
+           \/ {rec(registro:reg'registro, status:retirado)}    
+        END;
+        
+        //atualiza o status do container para encaminhado
+     setEncaminhado(func, tiem, reg) =
+        PRE
+            func : CPF & func : funcionarios & administrador(func) = TRUE
+            & tiem : navios & tiem : dom(navioContainer)
+            & reg : REG_CONTAINER & reg : navioContainer(tiem) & reg'status = retirado
+        THEN
+            navioContainer(tiem) := (navioContainer(tiem) - {reg2 | reg2: REG_CONTAINER & reg2 : navioContainer(tiem) & reg2'registro = reg'registro})
+           \/ {rec(registro:reg'registro, status:encaminhado)}    
+        END;
+        
+        //libera o navio somente se todos os containers estiverem com status de retirado
+        liberarNavio(func, tiem) =
+            PRE
+                func : CPF & func : funcionarios & administrador(func) = TRUE
+                & tiem : navios & tiem : dom(navioContainer)
+                & ! reg . (reg : REG_CONTAINER & reg : navioContainer(tiem)
+                    => reg'status = retirado)
+            THEN
+                navioContainer := {tiem} <<| navioContainer
+            END
 END
